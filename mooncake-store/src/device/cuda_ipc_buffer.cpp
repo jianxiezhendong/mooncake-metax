@@ -60,7 +60,7 @@ CUresult GetCudaAllocationRange(CUdeviceptr *base, size_t *size,
 tl::expected<CudaIpcBufferHandle, ErrorCode> ExportCudaIpcBuffer(
     const void *ptr, size_t size) {
 #if defined(USE_CUDA)
-    static_assert(sizeof(cudaIpcMemHandle_t) == kCudaIpcHandleSize,
+    static_assert(sizeof(cudaIpcMemHandle_t) <= kCudaIpcHandleSize,
                   "Unexpected CUDA IPC handle size");
 
     if (ptr == nullptr || size == 0) return UnsupportedCudaIpc();
@@ -175,7 +175,7 @@ CudaIpcBufferMapping &CudaIpcBufferMapping::operator=(
 tl::expected<CudaIpcBufferMapping, ErrorCode> CudaIpcBufferMapping::Open(
     const CudaIpcBufferHandle &handle) {
 #if defined(USE_CUDA)
-    static_assert(sizeof(cudaIpcMemHandle_t) == kCudaIpcHandleSize,
+    static_assert(sizeof(cudaIpcMemHandle_t) <= kCudaIpcHandleSize,
                   "Unexpected CUDA IPC handle size");
 
     if (handle.size == 0 || handle.device_id < 0 ||

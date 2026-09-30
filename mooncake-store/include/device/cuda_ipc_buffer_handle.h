@@ -9,7 +9,12 @@
 
 namespace mooncake {
 
+#if defined(USE_MACA)
+// MetaX mcIpcMemHandle_t / MC_IPC_HANDLE_SIZE is 80; NVIDIA CUDA is 64.
+constexpr size_t kCudaIpcHandleSize = 80;
+#else
 constexpr size_t kCudaIpcHandleSize = 64;
+#endif
 
 struct CudaIpcBufferHandle {
     std::array<uint8_t, kCudaIpcHandleSize> handle{};
