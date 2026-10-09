@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "tent/platform/cpu.h"
+#include "tent/transport/rdma/ibv_loader.h"
 #include "tent/common/status.h"
 #include "tent/common/utils/prefault.h"
 #include "tent/common/utils/random.h"
@@ -25,9 +26,9 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <algorithm>
 #include <ctype.h>
 #include <dirent.h>
-#include <infiniband/verbs.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,7 +39,17 @@
 
 namespace mooncake {
 namespace tent {
-static bool isIbDeviceAccessible(struct ibv_device* device) {
+
+static const IbvSymbols* verbsOrNull() {
+    auto& loader = IbvLoader::Instance();
+    if (!loader.available()) {
+        return nullptr;
+    }
+    return &loader.sym();
+}
+
+static bool isIbDeviceAccessible(const IbvSymbols& verbs,
+                                 struct ibv_device* device) {
     char device_path[PATH_MAX];
     struct stat st;
 
@@ -46,7 +57,7 @@ static bool isIbDeviceAccessible(struct ibv_device* device) {
              device->dev_name);
 
     if (stat(device_path, &st) != 0) {
-        LOG(WARNING) << "Device " << ibv_get_device_name(device) << " path "
+        LOG(WARNING) << "Device " << verbs.ibv_get_device_name(device) << " path "
                      << device_path << " does not exist";
         return false;
     }
@@ -67,12 +78,13 @@ static bool isIbDeviceAccessible(struct ibv_device* device) {
     return true;
 }
 
-static bool checkIbDevicePort(struct ibv_context* context,
+static bool checkIbDevicePort(const IbvSymbols& verbs,
+                              struct ibv_context* context,
                               const std::string& device_name,
                               uint8_t port_num) {
     struct ibv_port_attr port_attr;
 
-    if (ibv_query_port(context, port_num, &port_attr) != 0) {
+    if (verbs.ibv_query_port_default(context, port_num, &port_attr) != 0) {
         PLOG(WARNING) << "Failed to query port " << static_cast<int>(port_num)
                       << " on " << device_name;
         return false;
@@ -94,37 +106,38 @@ static bool checkIbDevicePort(struct ibv_context* context,
     return true;
 }
 
-static bool isIbDeviceAvailable(struct ibv_device* device) {
-    const char* device_name = ibv_get_device_name(device);
+static bool isIbDeviceAvailable(const IbvSymbols& verbs,
+                                struct ibv_device* device) {
+    const char* device_name = verbs.ibv_get_device_name(device);
 
-    if (!isIbDeviceAccessible(device)) {
+    if (!isIbDeviceAccessible(verbs, device)) {
         return false;
     }
 
-    struct ibv_context* context = ibv_open_device(device);
+    struct ibv_context* context = verbs.ibv_open_device(device);
     if (!context) {
         PLOG(WARNING) << "Failed to open device " << device_name;
         return false;
     }
 
     struct ibv_device_attr device_attr;
-    if (ibv_query_device(context, &device_attr) != 0) {
+    if (verbs.ibv_query_device(context, &device_attr) != 0) {
         PLOG(WARNING) << "Failed to query device attributes for "
                       << device_name;
-        ibv_close_device(context);
+        verbs.ibv_close_device(context);
         return false;
     }
 
     bool has_active_port = false;
     for (uint8_t port = 1; port <= device_attr.phys_port_cnt; ++port) {
-        if (checkIbDevicePort(context, device_name, port)) {
+        if (checkIbDevicePort(verbs, context, device_name, port)) {
             has_active_port = true;
             LOG(INFO) << "Device " << device_name << " port "
                       << static_cast<int>(port) << " is available";
         }
     }
 
-    ibv_close_device(context);
+    verbs.ibv_close_device(context);
 
     if (!has_active_port) {
         LOG(WARNING) << "Device " << device_name
@@ -135,23 +148,29 @@ static bool isIbDeviceAvailable(struct ibv_device* device) {
 }
 
 static std::vector<Topology::NicEntry> listInfiniBandDevices() {
+    const IbvSymbols* verbs = verbsOrNull();
+    if (!verbs) {
+        LOG(WARNING) << "No RDMA devices found, check your device installation";
+        return {};
+    }
+
     int num_devices = 0;
     std::vector<Topology::NicEntry> devices;
 
-    struct ibv_device** device_list = ibv_get_device_list(&num_devices);
+    struct ibv_device** device_list = verbs->ibv_get_device_list(&num_devices);
     if (!device_list) {
         LOG(WARNING) << "No RDMA devices found, check your device installation";
         return {};
     }
     if (num_devices <= 0) {
         LOG(WARNING) << "No RDMA devices found, check your device installation";
-        ibv_free_device_list(device_list);
+        verbs->ibv_free_device_list(device_list);
         return {};
     }
 
     for (int i = 0; i < num_devices; ++i) {
-        std::string device_name = ibv_get_device_name(device_list[i]);
-        if (!isIbDeviceAvailable(device_list[i])) {
+        std::string device_name = verbs->ibv_get_device_name(device_list[i]);
+        if (!isIbDeviceAvailable(*verbs, device_list[i])) {
             LOG(WARNING) << "Skipping unavailable device: " << device_name;
             continue;
         }
@@ -178,7 +197,7 @@ static std::vector<Topology::NicEntry> listInfiniBandDevices() {
                                .type = Topology::NIC_RDMA,
                                .numa_node = numa_node});
     }
-    ibv_free_device_list(device_list);
+    verbs->ibv_free_device_list(device_list);
     return devices;
 }
 

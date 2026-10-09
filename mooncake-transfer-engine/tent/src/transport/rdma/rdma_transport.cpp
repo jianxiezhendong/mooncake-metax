@@ -245,6 +245,13 @@ static bool isGpuDirectRdmaSupported(std::shared_ptr<Config> conf) {
     if (disable_gpu_direct) {
         return false;
     }
+    // MetaX MACA registers GPU memory with ibv_reg_mr through the MACA
+    // runtime. There is no nvidia_peermem/amdgpu module, so a peermem-only
+    // check leaves RDMA gpu_to_gpu/dram_to_gpu false and TENT reports
+    // "Unable to find registered buffer" for GPU PD writes.
+#ifdef USE_MACA
+    return true;
+#endif
     // Detect vendor GPUDirect/peer-memory drivers from /proc/modules.
     // NVIDIA: nvidia_peermem. AMD: peermem is built into amdgpu (linked with
     // ib_core), so the amdgpu module itself is the presence signal.

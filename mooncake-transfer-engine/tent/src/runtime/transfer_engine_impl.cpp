@@ -1132,6 +1132,7 @@ static MemoryType getTypeEnum(const std::string& type) {
     if (type == "cpu" || type == "*") return MTYPE_CPU;
     if (type == "cuda") return MTYPE_CUDA;
     if (type == "npu") return MTYPE_CUDA;
+    if (type == "maca") return MTYPE_CUDA;
     if (isAmdGpuLocationType(type)) return MTYPE_ROCM;
     if (type == "tpu") return MTYPE_TPU;
     return MTYPE_UNKNOWN;
@@ -1683,7 +1684,11 @@ Status TransferEngineImpl::commitPreparedSubmit(
         if (owner.route.qp_pool) task.qp_pool = *owner.route.qp_pool;
         if (task.type == UNSPEC) {
             LOG(WARNING) << "Unable to find registered buffer for request: "
-                         << printRequest(merged_request);
+                         << printRequest(merged_request)
+                         << " platform=" << Platform::getLoader().type()
+                         << " local_mtype="
+                         << Platform::getLoader().getMemoryType(
+                                merged_request.source);
             merged_task_id_map[merged_task_id] = task;
             continue;
         }

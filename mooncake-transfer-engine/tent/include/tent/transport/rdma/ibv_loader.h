@@ -80,6 +80,11 @@ class IbvLoader {
     void* handle_ = nullptr;
     IbvSymbols symbols_{};
     bool available_ = false;
+    // True only when this object dlopen()'d libibverbs and must dlclose it.
+    // RTLD_DEFAULT / RTLD_NOLOAD handles are borrowed: MetaX libkfi registers
+    // a process-global spdlog logger named "KFI", and a second libibverbs copy
+    // throws "logger with name 'KFI' already exists".
+    bool owned_handle_ = false;
 };
 
 }  // namespace tent

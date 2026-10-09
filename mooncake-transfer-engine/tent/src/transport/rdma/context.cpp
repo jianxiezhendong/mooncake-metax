@@ -32,6 +32,8 @@
 #ifdef USE_CUDA
 #include <cuda.h>
 #include <cuda_runtime.h>
+#elif defined(USE_MACA)
+#include "gpu_vendor/maca.h"
 #endif
 
 #include "tent/common/status.h"
@@ -518,7 +520,7 @@ RdmaContext::MemReg RdmaContext::registerMemReg(void* addr, size_t length,
         return nullptr;
     }
 
-#ifdef USE_CUDA
+#if defined(USE_CUDA) || defined(USE_MACA)
     // Ensure CUDA context is current for GPU memory registration
     // This is needed for worker threads or callers from non-CUDA threads
     CUmemorytype memType;

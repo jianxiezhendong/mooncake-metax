@@ -19,6 +19,19 @@ if(USE_CUDA)
   target_include_directories(tent_interface
                              INTERFACE ${CUDAToolkit_INCLUDE_DIRS})
   target_link_libraries(tent_interface INTERFACE CUDA::cudart)
+elseif(USE_MACA)
+  # MACA exposes the CUDA runtime/driver APIs. TENT must use CudaPlatform so
+  # GPU buffers are published as cuda:*; otherwise the initiator classifies
+  # MetaX VRAM as CPU and cannot select an RDMA GPU route to NVIDIA peers.
+  message(STATUS "CUDA: Enabled via MACA")
+  if(NOT DEFINED MACA_RUNTIME_LIBS)
+    set(MACA_RUNTIME_LIBS mcruntime mxc-runtime64 rt)
+  endif()
+  # Do not add USE_CUDA here. tent_interface is linked by transfer_engine;
+  # leaking USE_CUDA into a USE_MACA tree makes cuda_alike.h skip maca.h
+  # and then GPU_PREFIX is missing.
+  target_include_directories(tent_interface INTERFACE ${MACA_INCLUDE_DIR})
+  target_link_libraries(tent_interface INTERFACE ${MACA_RUNTIME_LIBS})
 else()
   message(STATUS "CUDA: Disabled")
 endif()

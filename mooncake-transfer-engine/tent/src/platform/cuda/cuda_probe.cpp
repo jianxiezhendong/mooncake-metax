@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "tent/platform/cuda.h"
+#include "tent/transport/rdma/ibv_loader.h"
 #include "tent/common/status.h"
 #include "tent/common/utils/prefault.h"
 #include "tent/common/utils/random.h"
@@ -28,7 +29,6 @@
 #include <vector>
 #include <cuda_runtime.h>
 #include <dirent.h>
-#include <infiniband/verbs.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,17 +40,27 @@
 namespace mooncake {
 namespace tent {
 static std::vector<Topology::NicEntry> listInfiniBandDevices() {
+    auto& loader = IbvLoader::Instance();
+    if (!loader.available()) {
+        LOG(WARNING) << "No RDMA devices found, check your device installation";
+        return {};
+    }
+    const IbvSymbols& verbs = loader.sym();
+
     int num_devices = 0;
     std::vector<Topology::NicEntry> devices;
 
-    struct ibv_device** device_list = ibv_get_device_list(&num_devices);
+    struct ibv_device** device_list = verbs.ibv_get_device_list(&num_devices);
     if (!device_list || num_devices <= 0) {
         LOG(WARNING) << "No RDMA devices found, check your device installation";
+        if (device_list) {
+            verbs.ibv_free_device_list(device_list);
+        }
         return {};
     }
 
     for (int i = 0; i < num_devices; ++i) {
-        std::string device_name = ibv_get_device_name(device_list[i]);
+        std::string device_name = verbs.ibv_get_device_name(device_list[i]);
         char path[PATH_MAX + 32];
         char resolved_path[PATH_MAX];
         // Get the PCI bus id for the infiniband device. Note that
@@ -74,6 +84,7 @@ static std::vector<Topology::NicEntry> listInfiniBandDevices() {
                                .type = Topology::NIC_RDMA,
                                .numa_node = numa_node});
     }
+    verbs.ibv_free_device_list(device_list);
     return devices;
 }
 
@@ -279,6 +290,13 @@ bool cudaDevicePresent() {
 
 bool cudaAbiMatches() {
     static const bool matches = [] {
+#ifdef USE_MACA
+        // MACA's CUDA-bridge reports a toolkit version that does not match
+        // the NVIDIA CUDART_VERSION TENT was compiled against. The pointer
+        // attribute ABI is still usable; skipping the probe would classify
+        // MetaX VRAM as CPU/UNKNOWN and break GPU PD routing.
+        return true;
+#else
         int runtime_version = 0;
         // Major version only: struct layout changes across CUDA majors.
         if (cudaRuntimeGetVersion(&runtime_version) == cudaSuccess &&
@@ -291,6 +309,7 @@ bool cudaAbiMatches() {
             return false;
         }
         return true;
+#endif
     }();
     return matches;
 }

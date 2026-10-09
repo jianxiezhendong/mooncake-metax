@@ -14,7 +14,7 @@
 
 #include "tent/runtime/platform.h"
 
-#ifdef USE_CUDA
+#if defined(USE_CUDA) || defined(USE_MACA)
 #include "tent/platform/cuda.h"
 #elif defined(USE_HIP)
 #include "tent/platform/rocm.h"
@@ -35,7 +35,7 @@ Platform& Platform::getLoader(std::shared_ptr<Config> conf) {
     static std::shared_ptr<Platform> g_instance;
     static std::once_flag flag;
     std::call_once(flag, [&]() {
-#ifdef USE_CUDA
+#if defined(USE_CUDA) || defined(USE_MACA)
         g_instance = std::make_shared<CudaPlatform>(conf);
 #elif defined(USE_HIP)
         g_instance = std::make_shared<RocmPlatform>(conf);

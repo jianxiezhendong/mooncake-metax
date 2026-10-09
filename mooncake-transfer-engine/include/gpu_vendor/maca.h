@@ -4,6 +4,7 @@
 #include <mcr/maca.h>
 #include <mcr/mc_runtime.h>
 #include <mcr/mc_runtime_api.h>
+#include <mcr/mc_runtime_api_deprecated.h>
 
 // First-stage MACA integration: provide a CUDA-like API surface.
 const static std::string GPU_PREFIX = "maca:";
@@ -16,8 +17,12 @@ const static std::string GPU_PREFIX = "maca:";
 #define CUdeviceptr mcDeviceptr_t
 #define CUmemorytype MCmemorytype
 #define CUresult mcError_t
+#define CUcontext MCcontext
 #define cuDeviceGet mcDeviceGet
 #define cuDeviceGetAttribute mcDeviceGetAttribute
+#define cuDevicePrimaryCtxRetain mcDevicePrimaryCtxRetain
+#define cuDevicePrimaryCtxRelease mcDevicePrimaryCtxRelease
+#define cuCtxSetCurrent mcCtxSetCurrent
 #define cuMemAddressFree mcMemAddressFree
 #define cuMemAddressReserve mcMemAddressReserve
 #define cuMemCreate mcMemCreate

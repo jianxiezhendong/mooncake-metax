@@ -3,6 +3,8 @@
 #ifdef USE_CUDA
 #include <cuda.h>
 #include <cuda_runtime.h>
+#include <string>
+const static std::string GPU_PREFIX = "cuda:";
 #elif defined(USE_HIP)
 #include "gpu_vendor/hip.h"
 #elif defined(USE_MUSA)

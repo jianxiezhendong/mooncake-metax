@@ -431,6 +431,13 @@ fi
 # libmpcomm.so; and (b) let patchelf rewrite a library carrying CUDA fatbins
 # (MPComm builds TMA kernels with USE_CUDA_KERNELS=ON by default), the same
 # corruption risk the EP/PG extensions are kept away from below.
+#
+# MetaX MACA runtimes (and libkfi) must stay out of the wheel for the same
+# reason CUDA/MUSA runtimes do. auditwheel copies them into
+# mooncake_transfer_engine.libs/; the C500 image already maps /opt/maca/lib64.
+# Two copies of libmcruntime construct MetaX KFI twice and spdlog aborts with
+# "logger with name 'KFI' already exists" on `import mooncake`. Keep DT_NEEDED
+# and resolve /opt/maca at runtime.
 ${AUDITWHEEL_CMD} repair ${OUTPUT_DIR}/*.whl \
     --exclude libcurl.so* \
     --exclude libfabric.so* \
@@ -479,6 +486,19 @@ ${AUDITWHEEL_CMD} repair ${OUTPUT_DIR}/*.whl \
     --exclude libmooncake_pg_device.so* \
     --exclude libmusa.so* \
     --exclude libmusart.so* \
+    --exclude libmcruntime.so* \
+    --exclude libmxc-runtime64.so* \
+    --exclude libmxkw.so* \
+    --exclude libmcanalyzer.so* \
+    --exclude libmchotspot_host.so* \
+    --exclude libmchotspot_target.so* \
+    --exclude libmcpti.so* \
+    --exclude libmccompiler.so* \
+    --exclude libmcToolsExt.so* \
+    --exclude libToolsExt_cu.so* \
+    --exclude libruntime_cu.so* \
+    --exclude libmaca_mathlib_host.so* \
+    --exclude libkfi.so* \
     --exclude libamdhip64.so* \
     --exclude libhsa-runtime64.so* \
     --exclude librocprofiler-register.so* \

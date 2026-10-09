@@ -20,7 +20,7 @@
 #include "tent/transport/rdma/rdma_transport.h"
 #endif
 
-#ifdef USE_CUDA
+#if defined(USE_CUDA) && !defined(USE_MACA)
 #include "tent/transport/nvlink/nvlink_transport.h"
 #include "tent/transport/mnnvl/mnnvl_transport.h"
 #endif
@@ -73,7 +73,7 @@ Status TransferEngineImpl::loadTransports() {
         transport_list_[IOURING] = std::make_shared<IOUringTransport>();
 #endif
 
-#ifdef USE_CUDA
+#if defined(USE_CUDA) && !defined(USE_MACA)
     bool enable_mnnvl = getenv("MC_ENABLE_MNNVL") != nullptr;
     if (enable_mnnvl) {
         if (conf_->get("transports/mnnvl/enable", true))

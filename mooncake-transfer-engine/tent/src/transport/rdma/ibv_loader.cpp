@@ -38,10 +38,31 @@ IbvLoader& IbvLoader::Instance() {
 }
 
 IbvLoader::IbvLoader() {
-    handle_ = dlopen("libibverbs.so.1", RTLD_NOW | RTLD_LOCAL);
-    if (!handle_) {
-        LOG(INFO) << "IbvLoader: libibverbs.so.1 not available: " << dlerror();
-        return;
+    // Prefer the copy already mapped by DT_NEEDED (cpu/cuda topology probe
+    // used to call ibv_* directly). A second dlopen of a different
+    // libibverbs.so.1 (conda vs MetaX) constructs libkfi twice; spdlog then
+    // aborts with "logger with name 'KFI' already exists".
+    dlerror();
+    if (dlsym(RTLD_DEFAULT, "ibv_get_device_list") != nullptr) {
+        handle_ = RTLD_DEFAULT;
+        owned_handle_ = false;
+        LOG(INFO) << "IbvLoader: reusing process-global libibverbs";
+    } else {
+        dlerror();
+        handle_ = dlopen("libibverbs.so.1", RTLD_NOLOAD | RTLD_GLOBAL);
+        if (handle_) {
+            owned_handle_ = false;
+            LOG(INFO) << "IbvLoader: reusing already-loaded libibverbs.so.1";
+        } else {
+            dlerror();
+            handle_ = dlopen("libibverbs.so.1", RTLD_NOW | RTLD_GLOBAL);
+            if (!handle_) {
+                LOG(INFO) << "IbvLoader: libibverbs.so.1 not available: "
+                          << dlerror();
+                return;
+            }
+            owned_handle_ = true;
+        }
     }
 
     bool ok = true;
@@ -85,35 +106,27 @@ IbvLoader::IbvLoader() {
     if (!ok) {
         LOG(WARNING) << "IbvLoader: missing required verbs symbols, "
                      << "RDMA will be disabled.";
-        dlclose(handle_);
-        handle_ = nullptr;
-        return;
-    }
-
-    int num_devices = 0;
-    ibv_device** dev_list = symbols_.ibv_get_device_list(&num_devices);
-    if (!dev_list || num_devices <= 0) {
-        if (dev_list) {
-            symbols_.ibv_free_device_list(dev_list);
+        if (owned_handle_ && handle_) {
+            dlclose(handle_);
         }
-        LOG(INFO) << "IbvLoader: no RDMA devices found, "
-                     "RDMA will be unavailable.";
-        dlclose(handle_);
         handle_ = nullptr;
+        owned_handle_ = false;
         return;
     }
 
-    symbols_.ibv_free_device_list(dev_list);
+    // Device presence is decided by topology probe / RdmaTransport, not here.
+    // Calling ibv_get_device_list in this ctor used to be a second KFI init
+    // on MetaX after CudaPlatform::probe already enumerated NICs.
     available_ = true;
-    LOG(INFO) << "IbvLoader: libibverbs loaded successfully, devices="
-              << num_devices;
+    LOG(INFO) << "IbvLoader: libibverbs loaded successfully";
 }
 
 IbvLoader::~IbvLoader() {
-    if (handle_) {
+    if (owned_handle_ && handle_) {
         dlclose(handle_);
-        handle_ = nullptr;
     }
+    handle_ = nullptr;
+    owned_handle_ = false;
 }
 }  // namespace tent
 }  // namespace mooncake
